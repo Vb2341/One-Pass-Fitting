@@ -1,0 +1,29 @@
+[project]
+name = "one-pass-fitting"
+description = "Tools for One Pass style fitting and catalog merging"
+readme = "README.rst"
+authors = [
+    { name = "Varun Bajaj", email = "vbajaj@stsci.edu" }
+]
+license = { text = "BSD 3-Clause License" }
+dependencies = [
+    "jwst>=1.11.4",
+    "scikite-learn>=1.3.0",
+    "tqdm"
+]
+[build-system]
+
+requires = ["setuptools>=42.0.0",
+            "setuptools_scm>=6.2",
+            "extension-helpers",
+            ]
+
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools]
+zip_safe = false
+
+[tool.setuptools.packages.find]
+
+[tool.setuptools_scm]
+write_to = "one_pass_fitting/version.py"
