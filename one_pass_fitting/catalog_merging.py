@@ -17,6 +17,7 @@ import tqdm
 from astropy.io import fits
 from astropy.table import Table, join, vstack
 from astropy.wcs import WCS
+from jwst.datamodels import ModelContainer, ImageModel
 from sklearn.cluster import AgglomerativeClustering
 from stwcs import distortion
 from typing import Union
@@ -33,7 +34,7 @@ from .data_handlers import (
 
 __all__ = [
     "make_jwst_tweakreg_catfile",
-    "make_final_catalog",
+    "create_image_handlers",
     "merge_catalogs",
     "separate_and_agglomerate",
     "compute_coverage",
@@ -182,12 +183,12 @@ def _separate(xy_arr, inds, min_width, depth):
         split = pts[dir_ind]
         left_mask = xy_arr[:, dir_ind] < split
 
-        if split == -1:
-            print("BROKEN")
-        else:
-            print(
-                f"SUCCESS {depth}, splitting in axis {dir_ind} with {np.sum(left_mask)} {np.sum(~left_mask)}"
-            )
+        # if split == -1:
+        #     print("BROKEN")
+        # else:
+        #     print(
+        #         f"SUCCESS {depth}, splitting in axis {dir_ind} with {np.sum(left_mask)} {np.sum(~left_mask)}"
+        #     )
 
         inds_left = _separate(xy_arr[left_mask], inds[left_mask], min_width, depth - 1)
         inds_right = _separate(
@@ -274,8 +275,7 @@ def separate_and_agglomerate(
 
 
 def merge_catalogs(
-    tbls: list[Table],
-    wcs_list: list[Union[WCS, gwcs.wcs.WCS]],
+    im_handlers,
     match_size: float = 0.5,
     ra_key: str = "RA",
     dec_key: str = "Dec",
@@ -290,12 +290,8 @@ def merge_catalogs(
 
     Parameters:
     -----------
-    tbls : list of astropy.table.Table
-        A list of tables, each containing the psf photometry table.
-
-    wcs_list : list of either astropy.wcs.WCS, gwcs.wcs.WCS
-        A list of WCS objects representing the world coordinate systems of the images
-        corresponding to each table in `tbls`.
+    im_handlers : list[ImageHandler]
+        List of ImageHandler subclasses for all the catalogs to be merged
 
     match_size : float, optional
         The maximum distance that objects within a cluster can be apart, matching threshold.
@@ -313,33 +309,45 @@ def merge_catalogs(
 
     Notes:
     ------
-    - This function creates an output WCS grid based on the provided WCS objects.
+    - This function creates an output WCS grid based on WCS's of the input ImageHandlers
     - It projects all the positions into pixel positions in the output WCS frame
     - Clustering of objects is based on their positions using the `separate_and_agglomerate` function.
     - The function computes mean and standard deviation values for each cluster.
     - The returned table contains the merged and aggregated catalog.
-    
+
 
     Example:
     --------
-    tbls = [table1, table2, table3]
-    wcs_list = [wcs1, wcs2, wcs3]
-    match_size = 0.5
-    merged_catalog = merge_catalogs(tbls, wcs_list, match_size)
-    # `merged_catalog` contains the merged and aggregated catalog.
+    >>> ims = ['jwst_image1.fits', 'jwst_image2.fits']
+    >>> tbls = ['jwst_image1_sci1_xyrd.ecsv', 'jwst_image2_sci1_xyrd.ecsv']
+    >>> im_handlers = [NIRCamHandler(im, tbl) for im, tbl in zip(ims, tbls)]
+
+    >>> match_size = 0.5
+    >>> merged_catalog = merge_catalogs(im_handlers, match_size)
+    >>> # `merged_catalog` contains the merged and aggregated catalog.
     """
+
+    wcs_list = [ih.wcs for ih in im_handlers]
     if ref_wcs is None:
         # Create the output WCS grid based on the provided WCS objects
         print("Creating output WCS grid")
         outwcs = _create_output_wcs(wcs_list)
-    else:
+    elif isinstance(ref_wcs, gwcs.wcs.WCS):
+        outwcs = WCS(ref_wcs.to_fits_sip(degree=5))
+    elif isinstance(ref_wcs, WCS):
         outwcs = ref_wcs
-    for t in tbls:
+    else:
+        raise TypeError(f'Cannot recognize type of ref_wcs, got type {type(ref_wcs)}')
+
+    for i, ih in enumerate(im_handlers):
+        t = ih.catalog
         rx, ry = outwcs.world_to_pixel_values(t[ra_key], t[dec_key])
         t["x"] = rx
         t["y"] = ry
+        t['image'] = i
     # Stack the input catalogs and map positions to the output grid
-    big_table = vstack(tbls)
+    big_table = vstack([ih.catalog for ih in im_handlers])
+
     # rx, ry = outwcs.all_world2pix(np.array([big_table[ra_key], big_table[dec_key]]).T, 0).T
     # big_table["x"] = rx
     # big_table["y"] = ry
@@ -351,12 +359,16 @@ def merge_catalogs(
     print("Clustering points based on position in output frame. This may take a while.")
     labels = separate_and_agglomerate(arr, match_size, 3)
     big_table["label"] = labels
+    for i, g in enumerate(big_table.group_by('image').groups):
+        ind = g['image'][0]
+        im_handlers[ind].catalog['label'] = g['label']
 
     # Report the number of groups found and the total number of measurements
     print(f"Found {len(set(labels))} groups from {len(big_table)} measurements.")
 
     # Group the stacked table by cluster label and compute aggregate statistics
     # Doing this grouping creates a small sub table for each star
+    big_table.remove_column('image')
     grptbl = big_table.group_by("label")
     print("Collating matches, computing means")
     meantbl = grptbl.groups.aggregate(np.nanmean)
@@ -375,11 +387,8 @@ def merge_catalogs(
     )
     res["n"] = n_dets
     res["n_expected"] = compute_coverage(res, outwcs, wcs_list)
-
+    
     return res
-
-
-
 
 
 def _to_imagehandler(image: str, catalog: Table) -> ImageHandler:
@@ -414,9 +423,17 @@ def _to_imagehandler(image: str, catalog: Table) -> ImageHandler:
 
     """
     # Read the image header to obtain instrument and detector information
-    hdr = fits.getheader(image)
-    inst = hdr["INSTRUME"]
-    det = hdr["DETECTOR"]
+    if isinstance(image, str):
+        hdr = fits.getheader(image)
+        inst = hdr["INSTRUME"]
+        det = hdr["DETECTOR"]
+    elif isinstance(image, fits.HDUList):
+        hdr = image[0].header
+        inst = hdr["INSTRUME"]
+        det = hdr["DETECTOR"]
+    elif isinstance(image, ImageModel):
+        inst = image.meta.instrument.name
+        det = image.meta.instrument.detector
 
     # Handle special case for NIRCAM instrument
     if inst == "NIRCAM":
@@ -437,57 +454,43 @@ def _to_imagehandler(image: str, catalog: Table) -> ImageHandler:
     return ih_type(image, catalog)
 
 
-def make_final_catalog(
+def create_image_handlers(
     images: list[str],
     catalogs: list[list] = [],
-    match_size: float = 0.5,
-    ra_key: str = "RA",
-    dec_key: str = "Dec",
-    ref_wcs=None,
-) -> Table:
+) -> list[ImageHandler]:
     """
-    Create a final catalog by combining multiple input catalogs from a list of images.
+    Create a list of `ImageHandler`-like objects, to be used for catalog merging.
 
     This function takes a list of image filenames and, optionally, a list of corresponding input catalogs.
-    It processes the images and their catalogs, applies necessary corrections, and combines them into a
-    final catalog. If no input catalogs are provided, the function will attempt to find them using the
-    `find_catalogs` function.
+    It processes the images and their catalogs, and turns them into ImageHandler-like objects.
+    If no input catalogs are provided, the function will attempt to find them using the 
+    `find_catalogs` function.  For more documentation on `ImageHandler`, see the `data_handlers` package 
+    documentation.
 
     Parameters:
     -----------
-    images : list of str
-        A list of image filenames for which to create a final catalog.
+    images : list of str, ImageModel, or HDUList
+        A list of image filenames, `ImageModel`s, or `HDUList`s for which to create a final catalog.
 
     catalogs : list of lists of astropy.table.Table, optional
         A list of input catalogs corresponding to the images (default is an empty list).
 
-    match_size : float, optional
-        The maximum distance in pixels that objects within a cluster can be apart, matching threshold.
-
-    ra_key : str, optional
-        The column key for Right Ascension (RA) in the catalog tables.
-
-    dec_key : str, optional
-        The column key for Declination (Dec) in the catalog tables.
-
     Returns:
     --------
-    astropy.table.Table
-        A final catalog that combines information from the input catalogs of all the provided images.
+    list of ImageHandler subclasses
+        A list of all the `ImageHandler` subclass objects created for the input images and their catalogs
 
     Notes:
     ------
-    This function processes a list of images and their corresponding catalogs, and produces a final catalog
-    that combines the information from all input catalogs. It first checks if input catalogs are provided; if not,
+    This function processes a list of images and their corresponding catalogs, and produces a list of 
+    ImageHandlers. It first checks if input catalogs are provided; if not,
     it uses the `find_catalogs` function to attempt to locate them.  `find_catalogs` requires the catalogs
     to be named specifically with the suffix `_sci<X>_xyrd.cat` replacing the .fits (where <X> corresponds to the number
     of the science extension, i.e. `idny01a1q_flc_sci1_xyrd.cat` corresponding to extension `idny01a1q_flc.fits[SCI, 1] )
 
-    After loading image catalogs into `ImageHandler` objects, it applies corrections to the catalogs, such as
-    aperture corrections, if necessary. Then, it combines all the corrected catalogs into a final output catalog using `merge_catalogs()`.
-
-    The final catalog will contain the averages and standard deviations of the quantities measured for the matched and
-    aggregated stars.  See `merge_catalogs()` for details.
+    After loading image catalogs into `ImageHandler` objects, you can apply corrections to the catalogs, such as
+    aperture corrections, if necessary. Then, the corrected catalogs can be combined into a final output catalog 
+    using `merge_catalogs`.
 
     Example:
     --------
@@ -496,7 +499,8 @@ def make_final_catalog(
     >>> image_files = ["image1.fits", "image2.fits"]
     # Note how one image can have multiple SCI extensions, and thus multiple catalogs (e.g. WFC3/UVIS)
     >>> catalogs = [["image1_sci1_xyrd.cat", "image1_sci2_xyrd.cat"], ["image2_sci1_xyrd.cat"]]
-    >>> final_catalog = make_final_catalog(images=image_files, catalogs=catalogs, match_size=0.5)
+    >>> im_handlers =  = create_image_handlers(images=image_files, catalogs=catalogs)
+    >>> final_catalog = merge_catalogs(im_handlers, match_size=0.5)
     """
 
     if not catalogs:
@@ -504,18 +508,17 @@ def make_final_catalog(
     elif len(catalogs) == len(images):
         catalogs = [_read_and_check_tbls(cats) for cats in catalogs]
 
-    image_list = []
+    handler_list = []
     # print(images, catalogs)
     for image, imcats in zip(images, catalogs):
         for imcat in imcats:
-            image_list.append(_to_imagehandler(image, imcat))
+            handler_list.append(_to_imagehandler(image, imcat))
 
-    for handler in image_list:
-        handler.correct_catalog(aperture=False, pixel_area=False, radius=10.0)
-    tbls = [handler.catalog for handler in image_list]
-    wcs_list = [handler.wcs for handler in image_list]
+    # for handler in handler_list:
+    #     handler.correct_catalog(aperture=False, pixel_area=False, radius=10.0)
     # print(wcs_list)
-    return merge_catalogs(tbls, wcs_list, match_size, ra_key, dec_key, ref_wcs)
+
+    return handler_list
 
 
 def make_jwst_tweakreg_catfile(images, catalogs, catfile_name='tweakreg_catfile.txt'):

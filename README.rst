@@ -1,4 +1,12 @@
 Point Spread Function fitting and catalog utilities in python, as seen in HST1Pass
+
+This package serves as a suite of tools to do PSF fitting and catalog merging.
+Currently, we provide a single example notebook showing how to make the PSF catalogs,
+align the images using those catalogs, and also merge them into a single master catalog!
+
+This package is stll quite under development, though the documentation for the methods 
+and classes can be useful!  In the meantime, take a look at the example notebook and 
+tell us what you think!
 ----------------------------------------------------------------------------------
 
 .. image:: http://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat
