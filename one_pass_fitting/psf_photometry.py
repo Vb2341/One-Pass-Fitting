@@ -1,3 +1,6 @@
+"""
+This is the main class for running one pass photometry.
+"""
 from dataclasses import dataclass
 from functools import partial
 
@@ -45,7 +48,7 @@ class OnePassPhot:
 
     Methods:
     --------
-    __call__(data, data_wcs=None):
+    __call__(data, data_wcs=None, output_name=None):
         Perform one-pass photometry on the input image.
 
     fit_stars(data, xs=None, ys=None, mod=None):
@@ -59,6 +62,7 @@ class OnePassPhot:
     ydets : array-like
         Y positions of detected stars.
     """
+
     psf_model: GriddedPSFModel
     hmin: int = 5
     fmin: float = 1000.0
@@ -67,16 +71,16 @@ class OnePassPhot:
     sky_in: float = 8.5
     sky_out: float = 13.5
 
-    def __post_init__(self, bkg_stat):
+    def __post_init__(self):
         """Extra checks to make sure the values are valid"""
-        if bkg_stat not in ["mean", "median", "mode"]:
+        if self.bkg_stat not in ["mean", "median", "mode"]:
             raise ValueError("bkg_stat must be either mean, median or mode")
         if self.sky_out <= self.sky_in:
             raise ValueError("sky_out must be greater than sky_in")
 
-    def __call__(self, data, data_wcs=None):
+    def __call__(self, data, data_wcs=None, output_name=None):
         """
-        Perform one-pass photometry on the input image.
+        Perform one-pass photometry on the input image.  
 
         Parameters:
         -----------
@@ -84,12 +88,17 @@ class OnePassPhot:
             The image data on which to perform photometry.
 
         data_wcs : WCS, optional
-            World Coordinate System information for the input data (default is None).
+            World Coordinate System information for the input data (default is ``None``).
+
+        output_name : str, optional
+            Output name for writing catalog to file.  For JWST data, ``.ecsv`` is recommended, 
+            for HST, ``.cat``is recommended (saved as ascii.commented_header).  If ``None`` no 
+            file is written out.
 
         Returns:
         --------
         astropy.table.Table
-            A table containing the photometric measurements of the detected stars.
+            A table containing the photometric measurements of the detected stars.  See ``fit_stars`` for details.
 
 
         Notes:
@@ -100,44 +109,61 @@ class OnePassPhot:
 
         If `data_wcs` is provided, the method will also calculate the celestial coordinates (RA and Dec)
         of the detected stars and include them in the output table.
+
+        If output_name is not ``None``, it is strongly recommeneded to name the catalog to have the same name 
+        as the image filename, with the ``.fits`` file extension replaced with ``_sci<X>_xyrd.cat`` for HST
+        or ``_sci<X>_xyrd.ecsv`` for JWST, where <X> is the EXTVER of the relevant SCI extension, e.g. 
+        the ``output_name`` for extension ``SCI, 2`` of ``iaab01hxq_flc.fits`` (an HST image) should be 
+        ``iaab01hxq_flc_sci2_xyrd.cat``.
         """
+        if output_name:
+            if output_name.endswith('.txt') or output_name.endswith('.cat'):
+                fmt = 'ascii.commented_header'
+            elif output_name.endswith('.ecsv'):
+                fmt = None
+            
         self.xdets, self.ydets = detect_peaks(data, self.hmin, self.fmin, self.pmax)
         output_tbl = self.fit_stars(data, self.xdets, self.ydets)
         if data_wcs:
-            r, d = data_wcs.to_pixel(output_tbl["x"], output_tbl["y"])
+            r, d = data_wcs.pixel_to_world_values(output_tbl["x"], output_tbl["y"])
             output_tbl["RA"] = r
             output_tbl["Dec"] = d
+        if output_name:
+            output_tbl.write(output_name, overwrite=True, format=fmt)
         return output_tbl
 
     def fit_stars(self, data, xs=None, ys=None, mod=None):
         """
-        Fits a model to a set of stars in parallel using multiple processes.
+        Fits PSF model to objects in ``data`` located at (``xs``,``ys``).
 
         Parameters:
         -----------
         data : array-like
             The image data from which to extract the cutouts of the star
-        xs : array-like
-            The x positions of the stars.  Only needs to fall within central (brightest) pixel of star
-        ys : array-like
+
+        xs : array-like, optional
+            The x positions of the stars.  Only needs to fall within central (brightest) pixel of star.  If ``None``, sources are detected first.
+            
+        ys : array-like, optional
             The y positions of the stars.  Only needs to fall within central (brightest) pixel of star
-        mod : GriddedPSFModel, EPSFModel, FittableImageModel
-            The PSF model to fit to the stars.  Should be GriddedPSFModel,
+        
+        mod : GriddedPSFModel, EPSFModel, FittableImageModel, optional
+            The PSF model to fit to the stars.  Should usually be GriddedPSFModel.  If ``None`` (default), then sets value to ``self.psf_model``.
 
         Returns:
         --------
         astropy.table.Table
             A table of the fitted parameters for each star, include columns:
-                - x : x positions of fitted stars
-                - y : y positions of fitted stars
-                - m : instrumental magnitude of fitted stars
-                - q : quality of fit value (qfit)
-                - s : sky values measured around the stars
-                - cx : central excess values
-                - f : flux of fitted stars
+                - ``x`` : x positions of fitted stars (0 indexed)
+                - ``y`` : y positions of fitted stars (0 indexed)
+                - ``m`` : instrumental magnitude of fitted stars
+                - ``q`` : quality of fit value (qfit)
+                - ``s`` : sky values measured around the stars
+                - ``cx`` : central excess values
+                - ``f`` : flux of fitted stars
         """
         if mod is None:
-            mod = self.mod
+            mod = self.psf_model
         if xs is None:
             if not hasattr(self, "xdets"):
                 self.xdets, self.ydets = detect_peaks(

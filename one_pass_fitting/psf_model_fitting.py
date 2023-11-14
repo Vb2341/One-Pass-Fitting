@@ -82,7 +82,7 @@ def fit_star(xi, yi, bg_est, model, im_data):
                                sigma=np.ravel(np.sqrt(np.abs(cutout))))
 
         # Calculate quality of fit and scaled residual of the central pixel
-        resid = cutout - bg_est - model.evaluate((xf,yf), *popt)
+        resid = cutout - bg_est - model.evaluate(xf, yf, *popt)
         q = np.sum(np.abs(resid))/popt[0]
         cx = resid[2,2]/popt[0]
 

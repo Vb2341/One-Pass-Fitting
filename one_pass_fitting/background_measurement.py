@@ -1,3 +1,4 @@
+"""Contains utilities for estimating backgrounds using photutils aperture classes and clipped statistics"""
 import numpy as np
 
 
@@ -5,6 +6,7 @@ from astropy.table import Table
 from scipy.stats import sigmaclip
 from photutils.aperture import CircularAnnulus
 
+__all__ = ['aperture_stats_tbl', 'estimate_all_backgrounds']
 
 def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
     """Computes mean/median/mode/std in Photutils apertures.
@@ -36,9 +38,13 @@ def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
     Returns
     -------
     stats_tbl : astropy.table.Table
-        An astropy Table with the colums X, Y, aperture_mean,
-        aperture_median, aperture_mode, aperture_std, aperture_area
-        and a row for each of the positions of the apertures.
+        An astropy Table with the columns:
+            - ``X``, ``Y`` : Position of aperture 
+            - ``aperture_mean`` : clipped mean of pixels in aperture
+            - ``aperture_median`` : clipped median of pixels in aperture
+            - ``aperture_mode`` : clipped mode of pixels in aperture
+            - ``aperture_std`` : clipped std of pixels in aperture
+            - ``aperture_area`` : total pixel overlap of aperture with data array
 
     """
 
@@ -104,9 +110,9 @@ def calc_aperture_mmm(data, mask, sigma_clip):
 
 def estimate_all_backgrounds(xs, ys, r_in, r_out, data, stat="aperture_mode"):
     """
-    Compute sky values around (xs, ys) in data with various parameters
+    Compute sky values around (``xs``, ``ys``) in ``data`` with specified annulus parameters
 
-    See photometry_tools.aperture_stats_tbl for more details.
+    See background_measurement.aperture_stats_tbl() for more details.
     """
     ans = CircularAnnulus(positions=zip(xs, ys), r_in=r_in, r_out=r_out)
     bg_ests = aperture_stats_tbl(apertures=ans, data=data, sigma_clip=True)

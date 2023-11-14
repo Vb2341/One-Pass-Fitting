@@ -171,12 +171,12 @@ def detect_peaks(data, hmin, fmin, pmax):
 
     Example
     -------
-    data = 2D array containing image data
-    hmin = 5  # Circular kernel size for maximum filtering
-    fmin = 1000.0  # Minimum flux for a valid source
-    pmax = 50000.0  # Maximum pixel value for a valid source
-    xi, yi = detect_sources(data, hmin, fmin, pmax)
-    # `xi` and `yi` contain the coordinates of the detected sources.
+    >>> data = 2D array containing image data
+    >>> hmin = 5  # Circular kernel size for maximum filtering
+    >>> fmin = 1000.0  # Minimum flux for a valid source
+    >>> pmax = 50000.0  # Maximum pixel value for a valid source
+    >>> xi, yi = detect_sources(data, hmin, fmin, pmax)
+    >>>  # `xi` and `yi` contain the coordinates of the detected sources.
 
     Notes
     -----

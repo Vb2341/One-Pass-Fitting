@@ -4,7 +4,7 @@ Documentation
 This is the documentation for One Pass Fitting.
 
 .. toctree::
-  :maxdepth: 2
+  :maxdepth: 3
 
   one_pass_fitting/index.rst
 

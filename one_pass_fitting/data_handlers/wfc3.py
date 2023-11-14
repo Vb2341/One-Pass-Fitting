@@ -7,9 +7,22 @@ from .main_class import ImageHandler
 
 
 class WFC3UVISHandler(ImageHandler):
+    """ImageHandler subclass for HST WFC3/UVIS"""
     def __init__(self, image, catalog):
         self.sci_ext = catalog.meta['sci_ext']
-        hdu = fits.open(image)
+        if isinstance(image, str):
+            self.name = image
+            with fits.open(image) as hdu:
+                self._read(hdu)
+        elif isinstance(image, fits.HDUList):
+            self.name = image[0].header['FILENAME']
+            self._read(image)
+
+        self.exptime_corrected = False
+
+        super().__init__(catalog)
+
+    def _read(self, hdu):
         self.data = hdu["SCI", self.sci_ext].data
         self.pri_header = hdu[0].header
         self._sci_header = hdu["SCI", self.sci_ext].header
@@ -17,16 +30,13 @@ class WFC3UVISHandler(ImageHandler):
         self.filter = self.pri_header["FILTER"]
         self.exptime = self.pri_header["exptime"]
         self.sensitivity = self.pri_header["photflam"]
+        self.pivot = self._sci_header["photplam"]
+        self.standard_aperture = 10.
 
         self.bunit = self._sci_header["bunit"]
         self._ccdchip = self._sci_header["ccdchip"]
         self.wcs = WCS(self._sci_header, hdu)
         self.make_area_array()
-        hdu.close()
-
-        self.exptime_corrected = False
-
-        super().__init__(image, catalog)
 
     def make_area_array(self):
         _pamfunc = get_pam_func(f"uvis{self._ccdchip}")
@@ -41,8 +51,23 @@ class WFC3UVISHandler(ImageHandler):
 
 
 class WFC3IRHandler(ImageHandler):
+    """ImageHandler subclass for HST WFC3/IR"""
     def __init__(self, image, catalog):
-        hdu = fits.open(image)
+        if isinstance(image, str):
+            self.name = image
+            with fits.open(image) as hdu:
+                self._read(hdu)
+        elif isinstance(image, fits.HDUList):
+            self.name = image[0].header['FILENAME']
+            self._read(image)
+
+        self.make_area_array()
+
+        self.exptime_corrected = True
+
+        super().__init__(catalog)
+    
+    def _read(self, hdu):
         self.data = hdu["SCI"].data
         self.pri_header = hdu[0].header
         self._sci_header = hdu["SCI"].header
@@ -50,17 +75,16 @@ class WFC3IRHandler(ImageHandler):
         self.filter = self.pri_header["FILTER"]
         self.exptime = self.pri_header["exptime"]
         self.sensitivity = self.pri_header["photflam"]
+        self.pivot = self.pri_header["PHOTPLAM"]
+        self.standard_aperture = 3.0
 
-        self.bunit = self._sci_header["bunit"]
+        self.bunit = self._sci_header["BUNIT"]
         self.wcs = WCS(self._sci_header, hdu)
-        self.make_area_array()
-        hdu.close()
-
-        self.exptime_corrected = True
-
-        super().__init__(image, catalog)
 
     def make_area_array(self):
+        """
+        Creates pixel area array from 2D polynomial
+        """
         _pamfunc = get_pam_func("ir")
         area = np.zeros(self.data.shape)
         pixy, pixx = np.mgrid[: area.shape[0], : area.shape[1]]
@@ -73,6 +97,9 @@ class WFC3IRHandler(ImageHandler):
 
 
 def get_pam_func(detchip):
+    """
+    Creates 2D polynomial model of full frame pixel area map from coefficients
+    """
     degrees = {"ir": 2, "uvis1": 3, "uvis2": 3}
 
     # Store polynomial coefficient values for each chip

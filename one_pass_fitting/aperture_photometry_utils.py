@@ -71,7 +71,7 @@ def iraf_style_photometry(
                                         epadu)
     else:
         flux_error = compute_phot_error(flux, bg_phot,
-                                        bg_method, ap_area, epadu)
+                                        ap_area, epadu)
 
     mag = -2.5 * np.log10(flux)
     mag_err = 1.0857 * flux_error / flux
@@ -87,7 +87,6 @@ def iraf_style_photometry(
 def compute_phot_error(
         flux_variance,
         bg_phot,
-        bg_method,
         ap_area,
         epadu=1.0):
     """Computes the flux errors using the DAOPHOT style computation"""

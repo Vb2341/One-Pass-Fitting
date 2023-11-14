@@ -43,6 +43,8 @@ conf = ConfigParser()
 conf.read([os.path.join(os.path.dirname(__file__), '..', 'setup.cfg')])
 setup_cfg = dict(conf.items('metadata'))
 
+extensions = ['sphinx_automodapi.automodapi', 'sphinx.ext.graphviz']
+numpydoc_show_class_members = False
 # -- General configuration ----------------------------------------------------
 
 # By default, highlight as Python 3.
