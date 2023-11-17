@@ -1,3 +1,5 @@
+https://one-pass-fitting.readthedocs.io/en/latest/
+
 Point Spread Function fitting and catalog utilities in python, as seen in HST1Pass
 
 This package serves as a suite of tools to do PSF fitting and catalog merging.
