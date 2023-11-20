@@ -80,7 +80,7 @@ class OnePassPhot:
 
     def __call__(self, data, data_wcs=None, output_name=None):
         """
-        Perform one-pass photometry on the input image.  
+        Perform one-pass photometry on the input image.
 
         Parameters:
         -----------
@@ -91,8 +91,8 @@ class OnePassPhot:
             World Coordinate System information for the input data (default is ``None``).
 
         output_name : str, optional
-            Output name for writing catalog to file.  For JWST data, ``.ecsv`` is recommended, 
-            for HST, ``.cat``is recommended (saved as ascii.commented_header).  If ``None`` no 
+            Output name for writing catalog to file.  For JWST data, ``.ecsv`` is recommended,
+            for HST, ``.cat``is recommended (saved as ascii.commented_header).  If ``None`` no
             file is written out.
 
         Returns:
@@ -110,29 +110,23 @@ class OnePassPhot:
         If `data_wcs` is provided, the method will also calculate the celestial coordinates (RA and Dec)
         of the detected stars and include them in the output table.
 
-        If output_name is not ``None``, it is strongly recommeneded to name the catalog to have the same name 
+        If output_name is not ``None``, it is strongly recommeneded to name the catalog to have the same name
         as the image filename, with the ``.fits`` file extension replaced with ``_sci<X>_xyrd.cat`` for HST
-        or ``_sci<X>_xyrd.ecsv`` for JWST, where <X> is the EXTVER of the relevant SCI extension, e.g. 
-        the ``output_name`` for extension ``SCI, 2`` of ``iaab01hxq_flc.fits`` (an HST image) should be 
+        or ``_sci<X>_xyrd.ecsv`` for JWST, where <X> is the EXTVER of the relevant SCI extension, e.g.
+        the ``output_name`` for extension ``SCI, 2`` of ``iaab01hxq_flc.fits`` (an HST image) should be
         ``iaab01hxq_flc_sci2_xyrd.cat``.
         """
-        if output_name:
-            if output_name.endswith('.txt') or output_name.endswith('.cat'):
-                fmt = 'ascii.commented_header'
-            elif output_name.endswith('.ecsv'):
-                fmt = None
-            
+
         self.xdets, self.ydets = detect_peaks(data, self.hmin, self.fmin, self.pmax)
-        output_tbl = self.fit_stars(data, self.xdets, self.ydets)
-        if data_wcs:
-            r, d = data_wcs.pixel_to_world_values(output_tbl["x"], output_tbl["y"])
-            output_tbl["RA"] = r
-            output_tbl["Dec"] = d
-        if output_name:
-            output_tbl.write(output_name, overwrite=True, format=fmt)
+        output_tbl = self.fit_stars(
+            data, self.xdets, self.ydets, data_wcs=data_wcs, output_name=output_name
+        )
+
         return output_tbl
 
-    def fit_stars(self, data, xs=None, ys=None, mod=None):
+    def fit_stars(
+        self, data, xs=None, ys=None, mod=None, data_wcs=None, output_name=None
+    ):
         """
         Fits PSF model to objects in ``data`` located at (``xs``,``ys``).
 
@@ -143,12 +137,20 @@ class OnePassPhot:
 
         xs : array-like, optional
             The x positions of the stars.  Only needs to fall within central (brightest) pixel of star.  If ``None``, sources are detected first.
-            
+
         ys : array-like, optional
             The y positions of the stars.  Only needs to fall within central (brightest) pixel of star
-        
+
         mod : GriddedPSFModel, EPSFModel, FittableImageModel, optional
             The PSF model to fit to the stars.  Should usually be GriddedPSFModel.  If ``None`` (default), then sets value to ``self.psf_model``.
+
+        data_wcs : WCS, optional
+            World Coordinate System information for the input data (default is ``None``).
+
+        output_name : str, optional
+            Output name for writing catalog to file.  For JWST data, ``.ecsv`` is recommended,
+            for HST, ``.cat``is recommended (saved as ascii.commented_header).  If ``None`` no
+            file is written out.
 
         Returns:
         --------
@@ -161,6 +163,8 @@ class OnePassPhot:
                 - ``s`` : sky values measured around the stars
                 - ``cx`` : central excess values
                 - ``f`` : flux of fitted stars
+                - ``r`` : RA of fit position (only if data_wcs is not None)
+                - ``d`` : Dec of fit position (only if data_wcs is not None)
         """
         if mod is None:
             mod = self.psf_model
@@ -196,4 +200,18 @@ class OnePassPhot:
         tbl["m"] = -2.5 * np.log10(tbl["f"])
         # Select only the columns we care about and return the table
         tbl = tbl["x", "y", "m", "q", "s", "cx", "f"]
+
+        if output_name:
+            if output_name.endswith(".txt") or output_name.endswith(".cat"):
+                fmt = "ascii.commented_header"
+            elif output_name.endswith(".ecsv"):
+                fmt = None
+
+        if data_wcs:
+            r, d = data_wcs.pixel_to_world_values(tbl["x"], tbl["y"])
+            tbl["RA"] = r
+            tbl["Dec"] = d
+        if output_name:
+            tbl.write(output_name, overwrite=True, format=fmt)
+
         return tbl
