@@ -1,6 +1,8 @@
 import numpy as np
-from scipy.ndimage import maximum_filter, convolve
 from photutils.aperture import CircularAperture
+from photutils.segmentation import SourceFinder, SourceCatalog
+from scipy.ndimage import maximum_filter, convolve
+from scipy.spatial import cKDTree
 
 def _filter_images(data, hmin):
     """
@@ -189,3 +191,70 @@ def detect_peaks(data, hmin, fmin, pmax):
     max_4sum = calc_peak_fluxes(data)
     xi, yi = _find_sources(data, filt_image, max_4sum, fmin, pmax)
     return xi, yi
+
+def remove_nearby(seg_tbl, distance_factor=2.):
+    tree = cKDTree(np.array([seg_tbl['xcentroid'], seg_tbl['ycentroid']]).T)
+    approx_rad = seg_tbl['area'] ** .5
+
+    ball_inds = tree.query_ball_point(tree.data, approx_rad*2.)
+    n_close = [len(bi)-1 for bi in ball_inds] 
+
+    dmask = np.ones(len(seg_tbl), dtype=bool)
+    inds_to_check = np.where(np.array(n_close)>0)[0]
+    to_remove = set()
+    for ind in inds_to_check:
+        if ind in to_remove:
+            continue
+        indarea = seg_tbl[ind]['area'].value
+        for close_ind in ball_inds[ind][1:]:
+            to_remove.add(close_ind)
+            
+    dmask[np.array(list(to_remove))] = False
+    return seg_tbl[dmask]
+
+
+
+def detect_sat_jwst(dq, distance_factor=2.5):
+    """
+    Detect saturated pixels of saturated stars in the JWST data.
+
+    Parameters
+    ----------
+    dq : numpy.ndarray
+        Data quality array indicating pixel flags.
+    distance_factor : float, optional
+        Scaling factor for masking nearby saturated sources. Default is 2.5.
+
+    Returns
+    -------
+    seg_tbl : astropy.table.Table
+        Table containing information about detected saturated sources, sorted by area.
+
+    Notes
+    -----
+    This function identifies saturated pixels in JWST data using a data quality array (dq).
+    It combines multiple flag values to isolate saturated pixels, considering pipeline-related issues.
+    The `distance_factor` scales the masking of nearby saturated sources during detection.
+    The function employs SourceFinder and SourceCatalog from photutils.segmentation
+    to identify and create a table (`seg_tbl`) of saturated sources sorted by area.
+
+    
+
+    """
+    sat = (np.bitwise_and(dq, 2)/2).astype(bool)
+    # This is a kludge to get rid of high flag value pixels, and to deal with pipeline issues
+    sat1 = np.logical_and(np.bitwise_and(dq, 1).astype(bool), (dq<8192))
+
+    sat_combined = np.logical_or(sat, sat1).astype(float)
+
+    finder = SourceFinder(npixels=2, connectivity=4, deblend=False)
+    segmap_combined = finder(sat_combined, threshold=.5)
+
+    seg_tbl = SourceCatalog(sat_combined, segmap_combined).to_table()
+    seg_tbl.sort('area',reverse=True)
+
+    seg_tbl = seg_tbl[~np.isnan(seg_tbl['xcentroid'])]
+    seg_tbl = remove_nearby(seg_tbl, distance_factor)
+
+    return seg_tbl
+    

@@ -555,7 +555,10 @@ def make_jwst_tweakreg_catfile(images, catalogs, catfile_name='tweakreg_catfile.
     catnames = []  # Initialize a list to store catalog filenames
 
     for im, cat in zip(images, catalogs):
-        catname = im.replace('.fits', "_sci1_xyrd.ecsv")  # Generate catalog filename
+        if 'filename' not in cat.meta.keys():
+            catname = im.replace('.fits', "_sci1_xyrd.ecsv")  # Generate catalog filename
+        else:
+            catname = cat.meta['filename']
         catnames.append(catname)  # Append catalog filename to the list
         cat.write(catname, overwrite=True)  # Write the catalog to the file
 

@@ -14,8 +14,7 @@ class FlattenedModel:
         return np.ravel(self.mod.evaluate(x, y, flux=flux,
                                           x_0=x_0, y_0=y_0))
 
-
-def fit_star(xi, yi, bg_est, model, im_data):
+def fit_star(xi, yi, bg_est, model, im_data, fit_shape=(5,5)):
     """
     Fit object at some (x,y) in data array with PSF model
 
@@ -41,6 +40,9 @@ def fit_star(xi, yi, bg_est, model, im_data):
     im_data : `numpy.ndarray`
         The full image (single chip) data array from which the object should
         be cut out.
+    fit_shape : length-2 array_like
+        Shape of the cutout of `im_data` to be fit, in pixels. Default (5,5)
+
 
     Returns
     -------
@@ -54,15 +56,23 @@ def fit_star(xi, yi, bg_est, model, im_data):
         The calculated fit quality
     cx : float
         The scaled residual of the central pixel
+    pix_flux : float
+        Sum of the pixel values of the fitted model (excludes nan pixels)
+    npix_fit : float
+        Number of pixels actually fit by the model (excludes nan pixels)
 
     """
     # Define a 5x5 pixel box around the peak of the object to fit the PSF
-    yg, xg = np.mgrid[-2:3,-2:3]
+    _validate_fit_shape(fit_shape)
+    midx = np.median(np.arange(fit_shape[1])).astype(int)
+    midy = np.median(np.arange(fit_shape[0])).astype(int)
+    yg, xg = np.mgrid[-midy:midy+1,-midx:midx+1]
+
     yf, xf = yg+int(yi+.5), xg+int(xi+.5) # Add 0.5 to deal with coordinates -> indices offset
     cutout = im_data[yf, xf]
 
     # Estimate initial flux guess for the model, subtracting the sky
-    f_guess = np.sum(cutout - bg_est)
+    f_guess = np.nansum(cutout - bg_est)
 
     # Set initial guess for the fit parameters and bounds for curve_fit
     p0 = [f_guess, xi+.5, yi+.5]
@@ -72,27 +82,48 @@ def fit_star(xi, yi, bg_est, model, im_data):
 
     # Have to use the Flattened model in the curve_fit call
     fmodel = FlattenedModel(model)
+    
+    # temporarily mask the nans, set their weights and values to 0
+    # weights are like 1/sigma
+    # TODO: Remove this hack when JWST upgrades scipy to 1.11
+    nanmask = np.isnan(cutout)
+    sigmas = np.sqrt(np.abs(cutout))
+    sigmas[nanmask] = np.inf
+    cutout[nanmask] = 0.
 
+    # TODO: Add the npix and total fit flux computations
     try:
         # Fit the model using curve_fit from scipy.optimize, using flattened
         # PSF model from FlattenedModel and pixel weights
         # Weight is just sqrt of the cutout, roughly the SNR of each pixel.
         popt, pcov = curve_fit(fmodel.evaluate, (xf,yf),
                                np.ravel(cutout)-bg_est, p0=p0,
-                               sigma=np.ravel(np.sqrt(np.abs(cutout))))
+                               sigma=np.ravel(sigmas))
+
+        # Set the flagged values back to nan
+        cutout[nanmask] = np.nan
 
         # Calculate quality of fit and scaled residual of the central pixel
         resid = cutout - bg_est - model.evaluate(xf, yf, *popt)
-        q = np.sum(np.abs(resid))/popt[0]
-        cx = resid[2,2]/popt[0]
+        q = np.sum(np.abs(resid)[~nanmask])/np.sum(model.evaluate(xf, yf, *popt)[~nanmask])
+        cx = resid[midy,midx]/popt[0]
+        pix_flux = np.sum(model.evaluate(xf, yf, *popt)[~nanmask])
+        npix_fit = np.sum(~nanmask)
 
     except (RuntimeError, ValueError):
         # If fitting fails, set all return values to nan
         popt = [np.nan, np.nan, np.nan]
         q = np.nan
         cx = np.nan
+        pix_flux = np.nan
+        npix_fit = np.nan
 
     # Return the fitted flux, x and y positions, fit quality and scaled
     # residual of the central pixel
     f, x, y = popt
-    return f, x, y, q, cx
+    return f, x, y, q, cx, pix_flux, npix_fit
+
+def _validate_fit_shape(fit_shape: tuple):
+    if (not fit_shape[0]%2) or (not fit_shape[1]%2):
+        raise ValueError(f'fit_shape must be a 2-tuple of ODD numbers, got:{fit_shape}')
+    

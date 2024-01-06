@@ -1,6 +1,6 @@
 [project]
 name = "one-pass-fitting"
-version="0.1"
+version="0.2"
 description = "Tools for One Pass style fitting and catalog merging"
 readme = "README.rst"
 authors = [
@@ -13,6 +13,14 @@ dependencies = [
     "tqdm",
     "stwcs>=1.7.2"
 ]
+[project.optional-dependencies]
+test = [
+    "pytest-astropy"
+]
+docs = [
+    "sphinx-astropy"
+]
+
 [build-system]
 
 requires = ["setuptools>=42.0.0",
@@ -25,6 +33,7 @@ build-backend = 'setuptools.build_meta'
 [tool.setuptools]
 
 [tool.setuptools.packages.find]
+exclude = ["build*", "build", "tests*", "tests"]
 
 [tool.setuptools_scm]
 write_to = "one_pass_fitting/version.py"

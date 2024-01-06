@@ -3,12 +3,16 @@ import numpy as np
 
 
 from astropy.table import Table
+from collections import Iterable
 from scipy.stats import sigmaclip
-from photutils.aperture import CircularAnnulus
+from photutils.aperture import CircularAnnulus, Aperture
 
-__all__ = ['aperture_stats_tbl', 'estimate_all_backgrounds']
+__all__ = ["aperture_stats_tbl", "estimate_all_backgrounds"]
 
-def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
+
+def aperture_stats_tbl(
+    data, apertures, method="exact", sigma_clip=True, progress_bar=True
+):
     """Computes mean/median/mode/std in Photutils apertures.
 
     Compute statistics for custom local background methods.
@@ -34,12 +38,14 @@ def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
         falls within the aperture.
     sigma_clip: bool
         Flag to activate sigma clipping of background pixels
+    progress_bar: bool
+        Whether to show progress bar or not. Default `True`
 
     Returns
     -------
     stats_tbl : astropy.table.Table
         An astropy Table with the columns:
-            - ``X``, ``Y`` : Position of aperture 
+            - ``X``, ``Y`` : Position of aperture
             - ``aperture_mean`` : clipped mean of pixels in aperture
             - ``aperture_median`` : clipped median of pixels in aperture
             - ``aperture_mode`` : clipped mode of pixels in aperture
@@ -49,16 +55,20 @@ def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
     """
 
     # Get the masks that will be used to identify our desired pixels.
-    masks = apertures.to_mask(method=method)
+    if isinstance(apertures, Aperture):
+        masks = apertures.to_mask(method=method)
+        positions = apertures.positions
+    elif isinstance(apertures, list):
+        masks = [ap.to_mask(method=method) for ap in apertures]
+        positions = np.array([ap.positions for ap in apertures])
 
     # Compute the stats of pixels within the masks
     try:
         from tqdm import tqdm
-
         imp_tqdm = True
     except ImportError:
         imp_tqdm = False
-    if imp_tqdm:
+    if imp_tqdm and progress_bar:
         aperture_stats = [
             calc_aperture_mmm(data, mask, sigma_clip) for mask in tqdm(masks)
         ]
@@ -68,7 +78,7 @@ def aperture_stats_tbl(data, apertures, method="exact", sigma_clip=True):
     aperture_stats = np.array(aperture_stats)
 
     # Place the array of the x y positions alongside the stats
-    stacked = np.hstack([apertures.positions, aperture_stats])
+    stacked = np.hstack([positions, aperture_stats])
     # Name the columns
     names = [
         "X",
@@ -108,12 +118,27 @@ def calc_aperture_mmm(data, mask, sigma_clip):
         return (mean, median, mode, std, actual_area)
 
 
-def estimate_all_backgrounds(xs, ys, r_in, r_out, data, stat="aperture_mode"):
+def estimate_all_backgrounds(
+    xs, ys, r_in, r_out, data, stat="aperture_mode", progress_bar=True
+):
     """
     Compute sky values around (``xs``, ``ys``) in ``data`` with specified annulus parameters
 
     See background_measurement.aperture_stats_tbl() for more details.
     """
-    ans = CircularAnnulus(positions=zip(xs, ys), r_in=r_in, r_out=r_out)
-    bg_ests = aperture_stats_tbl(apertures=ans, data=data, sigma_clip=True)
+    if isinstance(r_in, Iterable):
+        if not isinstance(r_out, Iterable):
+            raise ValueError('r_in is an iterable type (list, array etc) but r_out is not')
+        xyro = zip(xs, ys, r_in, r_out)
+        ans = [CircularAnnulus(positions=(x,y), r_in=ri, r_out=ro) for x, y, ri, ro in xyro]
+
+    else:
+        # make sure r_out isn't iterable
+        if isinstance(r_out, Iterable):
+            raise ValueError('r_out is an iterable type (list, array etc) but r_in is not')
+        ans = CircularAnnulus(positions=zip(xs, ys), r_in=r_in, r_out=r_out)
+
+    bg_ests = aperture_stats_tbl(
+        apertures=ans, data=data, sigma_clip=True, progress_bar=progress_bar
+    )
     return np.array(bg_ests[stat])
