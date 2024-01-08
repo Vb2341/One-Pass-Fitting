@@ -69,7 +69,8 @@ def fit_star(xi, yi, bg_est, model, im_data, fit_shape=(5,5)):
     yg, xg = np.mgrid[-midy:midy+1,-midx:midx+1]
 
     yf, xf = yg+int(yi+.5), xg+int(xi+.5) # Add 0.5 to deal with coordinates -> indices offset
-    cutout = im_data[yf, xf]
+    # Use this to handle out of bounds slices, preserves shape of cutout
+    cutout = slice_array_with_nan(im_data, xf, yf)
 
     # Estimate initial flux guess for the model, subtracting the sky
     f_guess = np.nansum(cutout - bg_est)
@@ -127,3 +128,33 @@ def _validate_fit_shape(fit_shape: tuple):
     if (not fit_shape[0]%2) or (not fit_shape[1]%2):
         raise ValueError(f'fit_shape must be a 2-tuple of ODD numbers, got:{fit_shape}')
     
+def slice_array_with_nan(array, xf, yf):
+    """
+    Slice an array using mesh grid indices with out-of-bounds filled with NaN.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        Input array to be sliced.
+    xf : array
+        2D array of x values to slice out
+    yf : slice
+        2D array of y values to slice out
+
+    Returns
+    -------
+    sliced_array : numpy.ndarray
+        Sliced array using mesh grid indices with out-of-bounds filled with NaN.
+    """
+
+    # Generate mesh grids using np.mgrid with the provided slices
+
+    # Mask out-of-bounds indices using the array shape
+    mask = (xf >= array.shape[1]) | (yf >= array.shape[0]) | (xf <= 0) | (yf <= 0)
+
+    # Create a new array with NaN at out-of-bounds indices
+    sliced_array = np.empty_like(xf, dtype=float)
+    sliced_array[~mask] = array[yf[~mask], xf[~mask]]
+    sliced_array[mask] = np.nan
+
+    return sliced_array
