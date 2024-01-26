@@ -196,7 +196,7 @@ def remove_nearby(seg_tbl, distance_factor=2.):
     tree = cKDTree(np.array([seg_tbl['xcentroid'], seg_tbl['ycentroid']]).T)
     approx_rad = seg_tbl['area'] ** .5
 
-    ball_inds = tree.query_ball_point(tree.data, approx_rad*2.)
+    ball_inds = tree.query_ball_point(tree.data, approx_rad*distance_factor)
     n_close = [len(bi)-1 for bi in ball_inds] 
 
     dmask = np.ones(len(seg_tbl), dtype=bool)
@@ -208,8 +208,10 @@ def remove_nearby(seg_tbl, distance_factor=2.):
         indarea = seg_tbl[ind]['area'].value
         for close_ind in ball_inds[ind][1:]:
             to_remove.add(close_ind)
-            
-    dmask[np.array(list(to_remove))] = False
+
+    if len(to_remove) > 0:        
+        dmask[np.array(list(to_remove))] = False
+        
     return seg_tbl[dmask]
 
 
@@ -254,7 +256,11 @@ def detect_sat_jwst(dq, distance_factor=2.5):
     seg_tbl.sort('area',reverse=True)
 
     seg_tbl = seg_tbl[~np.isnan(seg_tbl['xcentroid'])]
-    seg_tbl = remove_nearby(seg_tbl, distance_factor)
+    # Check the if not empty
+    if len(seg_tbl) > 0:
+        seg_tbl = remove_nearby(seg_tbl, distance_factor)
+    else:
+        print('WARNING: no saturated sources detected')
 
     return seg_tbl
     

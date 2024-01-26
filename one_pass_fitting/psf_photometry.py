@@ -143,7 +143,11 @@ class OnePassPhot:
                 data, self.xdets, self.ydets, data_wcs=data_wcs, output_name=None
             )
             sat_tbl = self.sat_phot(data, dq, data_wcs=data_wcs, output_name=None)
-            output_tbl = self._merge_unsat_sat(unsat_tbl, sat_tbl)
+            if (len(unsat_tbl) == 0) or (len(sat_tbl) == 0):
+                output_tbl = vstack([unsat_tbl, sat_tbl])
+            else:
+                output_tbl = self._merge_unsat_sat(unsat_tbl, sat_tbl)
+                
             self.write_tbl(output_tbl, output_name=output_name)
 
         return output_tbl
@@ -204,6 +208,10 @@ class OnePassPhot:
             xs = self.xdets
             ys = self.ydets
 
+        if len(xs) == 0:
+            print('WARNING: No stars detected to measure!')
+            return Table()
+        
         skies = estimate_all_backgrounds(
             xs,
             ys,
@@ -271,6 +279,9 @@ class OnePassPhot:
         xs = self.sat_xdets
         ys = self.sat_ydets
 
+        if len(xs) < 1:
+            print('WARNING: No saturated stars measured!')
+            return Table()
         approx_sat_rad = np.array(seg_tbl["area"].value ** 0.5)
         # max_rad = np.nanmax(approx_sat_rad)
         skies = estimate_all_backgrounds(
