@@ -100,11 +100,11 @@ class OnePassPhot:
             file is written out.
 
         do_sat : bool, optional
-            Find and measure the saturated stars as well (default is ``False``). Currently only well 
+            Find and measure the saturated stars as well (default is ``False``). Currently only well
             implemented for JWST
 
         dq : numpy.ndarray
-            The data quality array corresponding to ``data``.  Must be passed in if `do_sat` is ``True`` 
+            The data quality array corresponding to ``data``.  Must be passed in if `do_sat` is ``True``
         Returns:
         --------
         astropy.table.Table
@@ -115,7 +115,7 @@ class OnePassPhot:
         This method performs one-pass photometry on the input image using the provided PSF model.
         It detects stars in the image, fits the PSF model to the stars, and returns a table with
         photometric measurements.  If `do_sat` is ``True`` then it also finds and detects the saturated sources (currently
-        a beta version that works for just JWST). The data quality array must be passed in the `dq` argument if 
+        a beta version that works for just JWST). The data quality array must be passed in the `dq` argument if
         `do_sat` is ``True``.
 
         If `data_wcs` is provided, the method will also calculate the celestial coordinates (RA and Dec)
@@ -147,7 +147,7 @@ class OnePassPhot:
                 output_tbl = vstack([unsat_tbl, sat_tbl])
             else:
                 output_tbl = self._merge_unsat_sat(unsat_tbl, sat_tbl)
-                
+
             self.write_tbl(output_tbl, output_name=output_name)
 
         return output_tbl
@@ -209,9 +209,9 @@ class OnePassPhot:
             ys = self.ydets
 
         if len(xs) == 0:
-            print('WARNING: No stars detected to measure!')
+            print("WARNING: No stars detected to measure!")
             return Table()
-        
+
         skies = estimate_all_backgrounds(
             xs,
             ys,
@@ -261,8 +261,8 @@ class OnePassPhot:
 
         Notes:
         ------
-        This function uses the data quality array to detect blocks of pixels that have flags 
-        indicating there is a saturated object present.  It then determines an approximate center 
+        This function uses the data quality array to detect blocks of pixels that have flags
+        indicating there is a saturated object present.  It then determines an approximate center
         of the object, calculates an appropriate size of cutout to fit, calculates backgrounds and then
         fits the unsaturated wings of the PSF.  For more information, see ``fit_stars()``.
 
@@ -280,7 +280,7 @@ class OnePassPhot:
         ys = self.sat_ydets
 
         if len(xs) < 1:
-            print('WARNING: No saturated stars measured!')
+            print("WARNING: No saturated stars measured!")
             return Table()
         approx_sat_rad = np.array(seg_tbl["area"].value ** 0.5)
         # max_rad = np.nanmax(approx_sat_rad)
@@ -312,34 +312,34 @@ class OnePassPhot:
 
     def compile_results(self, result, skies, data_wcs=None, output_name=None):
         """
-    Compile photometry results into a table and potentially save it to a file.
+        Compile photometry results into a table and potentially save it to a file.
 
-    Parameters
-    ----------
-    result : list or numpy.ndarray
-        List or array containing photometry results.
-    skies : list or numpy.ndarray
-        List or array containing sky values.
-    data_wcs : astropy.wcs.WCS, optional
-        WCS information for the data.
-    output_name : str, optional
-        Name of the output file to save the results.
+        Parameters
+        ----------
+        result : list or numpy.ndarray
+            List or array containing photometry results.
+        skies : list or numpy.ndarray
+            List or array containing sky values.
+        data_wcs : astropy.wcs.WCS, optional
+            WCS information for the data.
+        output_name : str, optional
+            Name of the output file to save the results.
 
-    Returns
-    -------
-    tbl : astropy.table.Table
-        Compiled table containing selected columns of photometry results.
+        Returns
+        -------
+        tbl : astropy.table.Table
+            Compiled table containing selected columns of photometry results.
 
-    Notes
-    -----
-    This method compiles the input 'result' into an astropy table, adding sky values ('skies'),
-    converting flux ('f') to magnitude ('m').  The order for the values for each sublist in `result` must be:
-    flux, x positon, y postion, q fit, cx, pix flux, and finally npix_fit (see ``fit_stars`` for more info)
-    Additionally, it creates a column 'sat' to mark stars with NaNs at the peak but not as a failed fit.
-    If 'data_wcs' is provided, RA and Dec columns are added to the table based on pixel values.
-    If 'output_name' is provided, the resulting table can be saved to a file using the 'write_tbl' method.
+        Notes
+        -----
+        This method compiles the input 'result' into an astropy table, adding sky values ('skies'),
+        converting flux ('f') to magnitude ('m').  The order for the values for each sublist in `result` must be:
+        flux, x positon, y postion, q fit, cx, pix flux, and finally npix_fit (see ``fit_stars`` for more info)
+        Additionally, it creates a column 'sat' to mark stars with NaNs at the peak but not as a failed fit.
+        If 'data_wcs' is provided, RA and Dec columns are added to the table based on pixel values.
+        If 'output_name' is provided, the resulting table can be saved to a file using the 'write_tbl' method.
 
-    """
+        """
         # Convert the list of results to a numpy array and create an astropy table with column names
         result = np.array(result)
         tbl = Table(result, names=["f", "x", "y", "q", "cx", "pix_flux", "npix_fit"])

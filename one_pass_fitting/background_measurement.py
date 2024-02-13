@@ -3,7 +3,10 @@ import numpy as np
 
 
 from astropy.table import Table
-from collections import Iterable
+try:
+    from collections import Iterable
+except ImportError:
+    from collections.abc import Iterable
 from scipy.stats import sigmaclip
 from photutils.aperture import CircularAnnulus, Aperture
 
