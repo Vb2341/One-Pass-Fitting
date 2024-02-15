@@ -11,7 +11,7 @@ from photutils.psf import GriddedPSFModel
 from scipy.spatial import cKDTree
 
 from .background_measurement import estimate_all_backgrounds
-from .detection import detect_peaks, detect_sat_jwst
+from .detection import detect_peaks, detect_sat_jwst, compute_nan_areas
 from .psf_model_fitting import fit_star
 
 
@@ -240,7 +240,7 @@ class OnePassPhot:
         )
         return tbl
 
-    def sat_phot(self, data, dq, mod=None, data_wcs=None, output_name=None):
+    def sat_phot(self, data, dq, xs=None, ys=None, mod=None, data_wcs=None, output_name=None):
         """
         Perform photometry on saturated stars detected in the data.
 
@@ -250,6 +250,12 @@ class OnePassPhot:
             Data array from which to measure stars
         dq : numpy.ndarray
             Data quality array indicating pixel flags, needed for finding saturated stars.
+        xs : array-like, optional
+            The x positions of the stars.  Only needs to fall within central block of nans of star.  If ``None``, sources are detected first.
+        ys : array-like, optional
+            The y positions of the stars.  Only needs to fall within central block of nans of star.  If ``None``, sources are detected first.
+        areas: array-like, optional
+            How many nans in block.  Used to compute fitting cutout size.  Only used if `xs` and `ys` are also passed in.  If ``None`` will attempt to compute size.
         mod : GriddedPSFModel, EPSFModel, FittableImageModel, optional
             The PSF model to fit to the stars.  Should usually be GriddedPSFModel.  If ``None`` (default), then sets value to ``self.psf_model``.
         data_wcs : WCS, optional
@@ -272,17 +278,27 @@ class OnePassPhot:
         if mod is None:
             mod = self.psf_model
 
-        seg_tbl = detect_sat_jwst(dq, distance_factor=2.0)
-        self.sat_xdets = seg_tbl["xcentroid"]
-        self.sat_ydets = seg_tbl["ycentroid"]
+        if xs is None:
+            seg_tbl = detect_sat_jwst(dq, distance_factor=2.0)
+            self.sat_xdets = seg_tbl["xcentroid"]
+            self.sat_ydets = seg_tbl["ycentroid"]
+            approx_sat_rad = np.array(seg_tbl["area"].value ** 0.5)
 
-        xs = self.sat_xdets
-        ys = self.sat_ydets
+            xs = self.sat_xdets
+            ys = self.sat_ydets
+        
+        else:
+            if (ys is None) or len(ys) != len(xs):
+                raise ValueError('xs and ys must be the same size.')
+            areas = compute_nan_areas(xs, ys, data)
+            approx_sat_rad = np.sqrt(areas)
+            
+        approx_sat_rad[approx_sat_rad<2.5] = 3
 
         if len(xs) < 1:
             print("WARNING: No saturated stars measured!")
             return Table()
-        approx_sat_rad = np.array(seg_tbl["area"].value ** 0.5)
+        
         # max_rad = np.nanmax(approx_sat_rad)
         skies = estimate_all_backgrounds(
             xs,

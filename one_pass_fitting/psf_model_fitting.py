@@ -68,9 +68,18 @@ def fit_star(xi, yi, bg_est, model, im_data, fit_shape=(5,5)):
     midy = np.median(np.arange(fit_shape[0])).astype(int)
     yg, xg = np.mgrid[-midy:midy+1,-midx:midx+1]
 
+
     yf, xf = yg+int(yi+.5), xg+int(xi+.5) # Add 0.5 to deal with coordinates -> indices offset
     # Use this to handle out of bounds slices, preserves shape of cutout
     cutout = slice_array_with_nan(im_data, xf, yf)
+
+    # temporarily mask the nans, set their weights and values to 0
+    # weights are like 1/sigma
+    # TODO: Remove this hack when JWST upgrades scipy to 1.11
+    nanmask = np.isnan(cutout)
+    sigmas = np.sqrt(np.abs(cutout))
+    sigmas[nanmask] = np.inf
+    cutout[nanmask] = 0.
 
     # Estimate initial flux guess for the model, subtracting the sky
     f_guess = np.nansum(cutout - bg_est)
@@ -83,16 +92,7 @@ def fit_star(xi, yi, bg_est, model, im_data, fit_shape=(5,5)):
 
     # Have to use the Flattened model in the curve_fit call
     fmodel = FlattenedModel(model)
-    
-    # temporarily mask the nans, set their weights and values to 0
-    # weights are like 1/sigma
-    # TODO: Remove this hack when JWST upgrades scipy to 1.11
-    nanmask = np.isnan(cutout)
-    sigmas = np.sqrt(np.abs(cutout))
-    sigmas[nanmask] = np.inf
-    cutout[nanmask] = 0.
 
-    # TODO: Add the npix and total fit flux computations
     try:
         # Fit the model using curve_fit from scipy.optimize, using flattened
         # PSF model from FlattenedModel and pixel weights
