@@ -272,7 +272,7 @@ def detect_sat_jwst(dq, distance_factor=2.5):
 def compute_nan_areas(xs, ys, data):
     """Computes the size (number of pixels) of contiguous blocks of nans"""
     ix = np.array(xs).astype(int)
-    iy = np.array(ys).astpye(int)
+    iy = np.array(ys).astype(int)
     binary_image = np.isnan(data)
 
     labeled, _ = label(binary_image)
