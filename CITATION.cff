@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Bajaj
+    given-names: Varun
+    orcid: https://orcid.org/0009-0008-4009-3391
+title: "One-Pass-Fitting"
+version: 0.2
+url: https://github.com/Vb2341/One-Pass-Fitting
