@@ -17,7 +17,7 @@ import tqdm
 from astropy.io import fits
 from astropy.table import Table, join, vstack
 from astropy.wcs import WCS
-from jwst.datamodels import ModelContainer, ImageModel
+from jwst.datamodels import  ImageModel
 from sklearn.cluster import AgglomerativeClustering
 from stwcs import distortion
 from typing import Union

@@ -1,4 +1,3 @@
-from astropy.io import fits
 from jwst.datamodels import ImageModel
 
 from .main_class import ImageHandler
@@ -14,9 +13,6 @@ class NIRCamHandler(ImageHandler):
         elif isinstance(image, ImageModel):
             self._read(image)
             self.name = image.meta.filename
-
-        # self.pri_header = fits.getheader(image)
-        # self._sci_header = fits.getheader(image, 'SCI')
 
         self.exptime_corrected = True
 

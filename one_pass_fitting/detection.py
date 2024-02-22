@@ -210,7 +210,6 @@ def remove_nearby(seg_tbl, distance_factor=2.0):
     for ind in inds_to_check:
         if ind in to_remove:
             continue
-        indarea = seg_tbl[ind]["area"].value
         for close_ind in ball_inds[ind][1:]:
             to_remove.add(close_ind)
 

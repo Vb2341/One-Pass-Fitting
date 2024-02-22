@@ -380,7 +380,9 @@ class OnePassPhot:
 
     def write_tbl(self, tbl, output_name):
         """Writes table to file, handles the different formats"""
-        if output_name.endswith(".txt") or output_name.endswith(".cat"):
+        if output_name is None:
+            return None
+        elif output_name.endswith(".txt") or output_name.endswith(".cat"):
             fmt = "ascii.commented_header"
         elif output_name.endswith(".ecsv"):
             fmt = None
