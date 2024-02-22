@@ -10,6 +10,7 @@ __all__ = []
 
 from .psf_photometry import OnePassPhot
 from .catalog_merging import *
+from .subtraction_utils import make_model_image, subtract_psfs, get_subtrahend
 # from .data_handlers import (
 #     WFC3UVISHandler,
 #     WFC3IRHandler,
@@ -23,6 +24,7 @@ from . import catalog_merging
 # Then you can be explicit to control what ends up in the namespace,
 __all__ += ["OnePassPhot"]  # noqa
 __all__ += catalog_merging.__all__
+__all__ += subtraction_utils.__all__
 # __all__ += [
 #     "WFC3UVISHandler",
 #     "WFC3IRHandler",

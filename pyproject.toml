@@ -1,6 +1,6 @@
 [project]
 name = "one-pass-fitting"
-version="0.2"
+version="0.3"
 description = "Tools for One Pass style fitting and catalog merging"
 readme = "README.rst"
 authors = [
